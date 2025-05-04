@@ -2,9 +2,10 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Session, User } from "@supabase/supabase-js";
+import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 
-export interface User {
+// Renomeando a interface para AppUser para evitar conflito com User do Supabase
+export interface AppUser {
   id: string;
   name: string;
   email: string;
@@ -18,7 +19,7 @@ export interface User {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: AppUser | null;
   session: Session | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
@@ -30,7 +31,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
