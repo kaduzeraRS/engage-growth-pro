@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -75,7 +74,6 @@ export function LoginForm() {
     }
   };
 
-  // O resto do componente permanece o mesmo
   return (
     <div className="mx-auto w-full max-w-md space-y-6">
       <div className="space-y-2 text-center">

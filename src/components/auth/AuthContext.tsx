@@ -2,31 +2,10 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Session, User as SupabaseUser } from "@supabase/supabase-js";
-
-// Renomeando a interface para AppUser para evitar conflito com User do Supabase
-export interface AppUser {
-  id: string;
-  name: string;
-  email: string;
-  role: "user" | "power_user" | "agency" | "admin";
-  subscription: {
-    status: "active" | "inactive" | "trial";
-    plan: "free" | "monthly" | "yearly" | "lifetime";
-    expiresAt: string | null;
-  };
-  avatar?: string;
-}
-
-interface AuthContextType {
-  user: AppUser | null;
-  session: Session | null;
-  isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
-  loginWithGoogle: () => Promise<void>;
-  logout: () => Promise<void>;
-}
+import { Session } from "@supabase/supabase-js";
+import { AppUser, AuthContextType } from "@/types/auth";
+import { useUserData } from "@/hooks/useUserData";
+import { useAuthService } from "@/services/authService";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -35,61 +14,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
-
-  // Função para buscar dados do usuário a partir da sessão
-  const fetchUserData = async (currentSession: Session) => {
-    try {
-      console.log("AuthContext: Buscando dados do usuário para:", currentSession.user.id);
-      
-      // Buscar dados do perfil do usuário
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", currentSession.user.id)
-        .single();
-
-      if (profileError) {
-        console.error("AuthContext: Erro ao buscar perfil:", profileError);
-        return null;
-      }
-
-      if (!profile) {
-        console.error("AuthContext: Perfil não encontrado para o usuário:", currentSession.user.id);
-        return null;
-      }
-
-      // Buscar dados da assinatura
-      const { data: subscription, error: subscriptionError } = await supabase
-        .from("subscriptions")
-        .select("*")
-        .eq("user_id", currentSession.user.id)
-        .single();
-
-      if (subscriptionError && subscriptionError.code !== 'PGRST116') {
-        console.error("AuthContext: Erro ao buscar assinatura:", subscriptionError);
-      }
-
-      // Construir objeto de usuário
-      const userData: AppUser = {
-        id: profile.id,
-        name: profile.name || "Usuário",
-        email: profile.email || currentSession.user.email || "",
-        role: profile.role || "user",
-        avatar: profile.avatar,
-        subscription: {
-          status: subscription?.status || "trial",
-          plan: subscription?.plan || "free",
-          expiresAt: subscription?.expires_at,
-        },
-      };
-
-      console.log("AuthContext: Dados do usuário carregados com sucesso:", userData.name);
-      return userData;
-    } catch (error) {
-      console.error("AuthContext: Erro ao buscar dados do usuário:", error);
-      return null;
-    }
-  };
+  const { fetchUserData } = useUserData();
+  const { login, register, loginWithGoogle, logout: authLogout } = useAuthService();
 
   useEffect(() => {
     console.log("AuthContext: Inicializando AuthProvider");
@@ -164,160 +90,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    try {
-      setIsLoading(true);
-      console.log("AuthContext: Tentando fazer login com email:", email);
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (error) {
-        console.error("AuthContext: Erro no login:", error.message);
-        toast({
-          title: "Falha no login",
-          description: error.message,
-          variant: "destructive",
-        });
-        return false;
-      }
-
-      console.log("AuthContext: Login bem-sucedido, dados da sessão:", data.session ? "presente" : "ausente");
-      
-      toast({
-        title: "Login bem-sucedido",
-        description: "Bem-vindo de volta ao sistema!",
-      });
-
-      // O listener de autenticação irá atualizar o estado
-      return true;
-    } catch (error) {
-      console.error("AuthContext: Erro ao fazer login:", error);
-      toast({
-        title: "Erro no login",
-        description: "Ocorreu um problema ao tentar fazer login",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
+  const handleLogin = async (email: string, password: string): Promise<boolean> => {
+    setIsLoading(true);
+    const success = await login(email, password);
+    if (!success) setIsLoading(false);
+    return success;
   };
 
-  // O resto do componente permanece o mesmo
-  const register = async (name: string, email: string, password: string): Promise<boolean> => {
-    try {
-      setIsLoading(true);
-      console.log("AuthContext: Tentando registrar usuário:", email);
-      
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name,
-          },
-        },
-      });
-      
-      if (error) {
-        console.error("AuthContext: Erro no registro:", error.message);
-        toast({
-          title: "Falha no cadastro",
-          description: error.message,
-          variant: "destructive",
-        });
-        return false;
-      }
-      
-      toast({
-        title: "Cadastro realizado",
-        description: "Sua conta foi criada com sucesso!",
-      });
-      console.log("AuthContext: Registro bem-sucedido para:", email);
-      return true;
-    } catch (error) {
-      console.error("AuthContext: Erro ao registrar:", error);
-      toast({
-        title: "Erro no cadastro",
-        description: "Ocorreu um problema ao tentar criar sua conta",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
+  const handleRegister = async (name: string, email: string, password: string): Promise<boolean> => {
+    setIsLoading(true);
+    const success = await register(name, email, password);
+    if (!success) setIsLoading(false);
+    return success;
   };
 
-  const loginWithGoogle = async (): Promise<void> => {
-    try {
-      console.log("AuthContext: Iniciando login com Google");
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      
-      if (error) {
-        console.error("AuthContext: Erro no login com Google:", error);
-        toast({
-          title: "Falha no login com Google",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        console.log("AuthContext: Redirecionando para autenticação Google");
-      }
-    } catch (error) {
-      console.error("AuthContext: Erro no login com Google:", error);
-      toast({
-        title: "Erro no login com Google",
-        description: "Ocorreu um problema ao tentar login com Google",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const logout = async (): Promise<void> => {
-    try {
-      console.log("AuthContext: Iniciando processo de logout");
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) {
-        console.error("AuthContext: Erro ao fazer logout:", error);
-        toast({
-          title: "Erro no logout",
-          description: "Ocorreu um problema ao tentar sair",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setUser(null);
-      setSession(null);
-      
-      toast({
-        title: "Logout realizado",
-        description: "Você saiu com sucesso",
-      });
-      
-      console.log("AuthContext: Logout realizado com sucesso");
-    } catch (error) {
-      console.error("AuthContext: Erro inesperado ao fazer logout:", error);
-      toast({
-        title: "Erro no logout",
-        description: "Ocorreu um problema ao tentar sair",
-        variant: "destructive",
-      });
-    }
+  const handleLogout = async (): Promise<void> => {
+    setUser(null);
+    setSession(null);
+    await authLogout();
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, session, isLoading, login, register, loginWithGoogle, logout }}
+      value={{
+        user,
+        session,
+        isLoading,
+        login: handleLogin,
+        register: handleRegister,
+        loginWithGoogle,
+        logout: handleLogout,
+      }}
     >
       {children}
     </AuthContext.Provider>
