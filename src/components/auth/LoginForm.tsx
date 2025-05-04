@@ -18,13 +18,30 @@ export function LoginForm() {
     e.preventDefault();
     setIsLoading(true);
     
-    const success = await login(email, password);
-    
-    if (success) {
-      navigate("/dashboard");
+    try {
+      console.log("Iniciando login com email:", email);
+      const success = await login(email, password);
+      
+      if (success) {
+        console.log("Login bem-sucedido, redirecionando para /dashboard");
+        navigate("/dashboard");
+      } else {
+        console.log("Login falhou, permanecendo na página");
+      }
+    } catch (error) {
+      console.error("Erro durante o processo de login:", error);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await loginWithGoogle();
+      // O redirecionamento será gerenciado pelo Supabase OAuth
+    } catch (error) {
+      console.error("Erro ao fazer login com Google:", error);
+    }
   };
 
   return (
@@ -84,7 +101,7 @@ export function LoginForm() {
           </div>
         </div>
         <div className="grid grid-cols-1 gap-2">
-          <Button variant="outline" type="button" onClick={loginWithGoogle}>
+          <Button variant="outline" type="button" onClick={handleGoogleLogin}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"

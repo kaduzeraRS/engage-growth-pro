@@ -88,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 expiresAt: subscription?.expires_at,
               },
             });
+
+            console.log("Usuário autenticado e dados carregados:", profile.name);
           } catch (error) {
             console.error("Erro ao processar usuário logado:", error);
             setUser(null);
@@ -111,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (data.session?.user) {
         try {
+          console.log("Sessão encontrada para o usuário:", data.session.user.id);
           // Buscar dados do perfil do usuário
           const { data: profile, error: profileError } = await supabase
             .from("profiles")
@@ -149,10 +152,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               expiresAt: subscription?.expires_at,
             },
           });
+
+          console.log("Sessão inicial: usuário autenticado", profile.name);
         } catch (error) {
           console.error("Erro ao processar sessão inicial:", error);
           setUser(null);
         }
+      } else {
+        console.log("Nenhuma sessão inicial encontrada");
       }
       
       setIsLoading(false);
@@ -168,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
+      console.log("Tentando fazer login com email:", email);
       
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -175,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       if (error) {
+        console.error("Erro no login:", error.message);
         toast({
           title: "Falha no login",
           description: error.message,
@@ -187,6 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Login bem-sucedido",
         description: "Bem-vindo de volta ao sistema!",
       });
+
+      console.log("Login bem-sucedido através do método login()");
       return true;
     } catch (error) {
       console.error("Erro ao fazer login:", error);

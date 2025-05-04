@@ -9,9 +9,15 @@ const Index = () => {
 
   useEffect(() => {
     if (!isLoading) {
-      // Redireciona para o dashboard se estiver autenticado
-      // ou para a landing page se não estiver
-      navigate(user ? "/dashboard" : "/");
+      // Se o usuário estiver autenticado, redireciona para o dashboard
+      // Caso contrário, redireciona para a página inicial
+      if (user) {
+        console.log("Usuário autenticado, redirecionando para /dashboard");
+        navigate("/dashboard");
+      } else {
+        console.log("Usuário não autenticado, redirecionando para landing page");
+        navigate("/landing");
+      }
     }
   }, [user, isLoading, navigate]);
 

@@ -15,6 +15,7 @@ import HeatingPage from "./pages/dashboard/heating/HeatingPage";
 import AdminUsersPage from "./pages/dashboard/admin/AdminUsersPage";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
 
@@ -26,8 +27,10 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            {/* Rota de redirecionamento */}
+            <Route path="/" element={<Index />} />
             {/* Páginas públicas */}
-            <Route path="/" element={<LandingPage />} />
+            <Route path="/landing" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 
