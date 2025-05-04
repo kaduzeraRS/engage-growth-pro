@@ -16,6 +16,7 @@ const ProtectedRoute = ({
 
   // Aguardar carregamento da autenticação
   if (isLoading) {
+    console.log("ProtectedRoute: Carregando...");
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
@@ -28,7 +29,7 @@ const ProtectedRoute = ({
 
   // Se o usuário não estiver autenticado, redirecionar para o login
   if (!user) {
-    console.log("Usuário não autenticado, redirecionando para /login");
+    console.log("ProtectedRoute: Usuário não autenticado, redirecionando para /login");
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -54,7 +55,7 @@ const ProtectedRoute = ({
   }
 
   // Se tudo estiver ok, renderizar os filhos
-  console.log("Usuário autenticado com papel correto, renderizando conteúdo protegido");
+  console.log("ProtectedRoute: Usuário autenticado, renderizando conteúdo protegido");
   return <>{children}</>;
 };
 

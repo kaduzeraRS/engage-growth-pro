@@ -8,13 +8,15 @@ const Index = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log("Index: isLoading:", isLoading, "user:", user ? "autenticado" : "não autenticado");
+    
     if (!isLoading) {
       if (user) {
-        console.log("Usuário autenticado, redirecionando para /dashboard");
-        navigate("/dashboard");
+        console.log("Index: Usuário autenticado, redirecionando para /dashboard");
+        navigate("/dashboard", { replace: true });
       } else {
-        console.log("Usuário não autenticado, redirecionando para landing page");
-        navigate("/landing");
+        console.log("Index: Usuário não autenticado, redirecionando para landing page");
+        navigate("/landing", { replace: true });
       }
     }
   }, [user, isLoading, navigate]);

@@ -17,7 +17,14 @@ import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false
+    }
+  }
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -27,25 +34,36 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* Rota de redirecionamento */}
+            {/* Rota de redirecionamento inicial */}
             <Route path="/" element={<Index />} />
+            
             {/* Páginas públicas */}
             <Route path="/landing" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 
             {/* Rotas protegidas do dashboard */}
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }>
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }
+            >
               <Route index element={<DashboardPage />} />
               <Route path="accounts" element={<AccountsPage />} />
               <Route path="heating" element={<HeatingPage />} />
               
               {/* Rotas de administração */}
-              <Route path="admin/users" element={<AdminUsersPage />} />
+              <Route 
+                path="admin/users" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminUsersPage />
+                  </ProtectedRoute>
+                } 
+              />
               
               {/* Redireciona páginas vazias para implementação futura */}
               <Route path="scheduler" element={<div className="p-4">Agendamento de Posts - Implementação Futura</div>} />

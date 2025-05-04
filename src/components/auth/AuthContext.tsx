@@ -36,66 +36,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
+  // Função para buscar dados do usuário a partir da sessão
+  const fetchUserData = async (currentSession: Session) => {
+    try {
+      console.log("AuthContext: Buscando dados do usuário para:", currentSession.user.id);
+      
+      // Buscar dados do perfil do usuário
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", currentSession.user.id)
+        .single();
+
+      if (profileError) {
+        console.error("AuthContext: Erro ao buscar perfil:", profileError);
+        return null;
+      }
+
+      if (!profile) {
+        console.error("AuthContext: Perfil não encontrado para o usuário:", currentSession.user.id);
+        return null;
+      }
+
+      // Buscar dados da assinatura
+      const { data: subscription, error: subscriptionError } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", currentSession.user.id)
+        .single();
+
+      if (subscriptionError && subscriptionError.code !== 'PGRST116') {
+        console.error("AuthContext: Erro ao buscar assinatura:", subscriptionError);
+      }
+
+      // Construir objeto de usuário
+      const userData: AppUser = {
+        id: profile.id,
+        name: profile.name || "Usuário",
+        email: profile.email || currentSession.user.email || "",
+        role: profile.role || "user",
+        avatar: profile.avatar,
+        subscription: {
+          status: subscription?.status || "trial",
+          plan: subscription?.plan || "free",
+          expiresAt: subscription?.expires_at,
+        },
+      };
+
+      console.log("AuthContext: Dados do usuário carregados com sucesso:", userData.name);
+      return userData;
+    } catch (error) {
+      console.error("AuthContext: Erro ao buscar dados do usuário:", error);
+      return null;
+    }
+  };
+
   useEffect(() => {
+    console.log("AuthContext: Inicializando AuthProvider");
+    let ignore = false;
+    
     // Configurar listener para mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
-        console.log("Auth event:", event);
-        setSession(currentSession);
+        console.log("AuthContext: Evento de autenticação:", event);
         
-        if (currentSession?.user) {
-          try {
-            // Buscar dados do perfil do usuário
-            const { data: profile, error: profileError } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", currentSession.user.id)
-              .single();
-
-            if (profileError) {
-              console.error("Erro ao buscar perfil:", profileError);
-              setUser(null);
-              return;
+        if (ignore) return;
+        
+        if (currentSession) {
+          console.log("AuthContext: Sessão detectada, atualizando estado");
+          setSession(currentSession);
+          
+          // Usar setTimeout para evitar deadlocks no Supabase auth
+          setTimeout(async () => {
+            if (ignore) return;
+            const userData = await fetchUserData(currentSession);
+            if (!ignore && userData) {
+              setUser(userData);
+              setIsLoading(false);
             }
-
-            if (!profile) {
-              console.error("Perfil não encontrado para o usuário:", currentSession.user.id);
-              setUser(null);
-              return;
-            }
-
-            // Buscar dados da assinatura
-            const { data: subscription, error: subscriptionError } = await supabase
-              .from("subscriptions")
-              .select("*")
-              .eq("user_id", currentSession.user.id)
-              .single();
-
-            if (subscriptionError) {
-              console.error("Erro ao buscar assinatura:", subscriptionError);
-            }
-
-            // Construir objeto de usuário com dados do perfil e assinatura
-            setUser({
-              id: profile.id,
-              name: profile.name,
-              email: profile.email,
-              role: profile.role,
-              avatar: profile.avatar,
-              subscription: {
-                status: subscription?.status || "trial",
-                plan: subscription?.plan || "free",
-                expiresAt: subscription?.expires_at,
-              },
-            });
-
-            console.log("Usuário autenticado e dados carregados:", profile.name);
-          } catch (error) {
-            console.error("Erro ao processar usuário logado:", error);
-            setUser(null);
-          }
+          }, 0);
         } else {
+          console.log("AuthContext: Nenhuma sessão detectada, limpando estado");
           setUser(null);
+          setSession(null);
+          setIsLoading(false);
         }
       }
     );
@@ -103,76 +127,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Verificar sessão inicial
     const checkSession = async () => {
       try {
-        console.log("Verificando sessão inicial...");
+        console.log("AuthContext: Verificando sessão inicial...");
         const { data, error } = await supabase.auth.getSession();
         if (error) {
-          console.error("Erro ao verificar sessão:", error);
+          console.error("AuthContext: Erro ao verificar sessão:", error);
           setIsLoading(false);
           return;
         }
 
-        setSession(data.session);
-        
-        if (data.session?.user) {
-          try {
-            console.log("Sessão encontrada para o usuário:", data.session.user.id);
-            // Buscar dados do perfil do usuário
-            const { data: profile, error: profileError } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", data.session.user.id)
-              .single();
-
-            if (profileError || !profile) {
-              console.error("Erro ao buscar perfil inicial:", profileError);
-              setUser(null);
-              setIsLoading(false);
-              return;
-            }
-
-            // Buscar dados da assinatura
-            const { data: subscription, error: subscriptionError } = await supabase
-              .from("subscriptions")
-              .select("*")
-              .eq("user_id", data.session.user.id)
-              .single();
-
-            if (subscriptionError) {
-              console.error("Erro ao buscar assinatura inicial:", subscriptionError);
-            }
-
-            // Construir objeto de usuário com dados do perfil e assinatura
-            setUser({
-              id: profile.id,
-              name: profile.name,
-              email: profile.email,
-              role: profile.role,
-              avatar: profile.avatar,
-              subscription: {
-                status: subscription?.status || "trial",
-                plan: subscription?.plan || "free",
-                expiresAt: subscription?.expires_at,
-              },
-            });
-
-            console.log("Sessão inicial: usuário autenticado", profile.name);
-          } catch (error) {
-            console.error("Erro ao processar sessão inicial:", error);
-            setUser(null);
+        if (data.session) {
+          console.log("AuthContext: Sessão inicial encontrada");
+          setSession(data.session);
+          
+          const userData = await fetchUserData(data.session);
+          if (!ignore && userData) {
+            setUser(userData);
           }
         } else {
-          console.log("Nenhuma sessão inicial encontrada");
+          console.log("AuthContext: Nenhuma sessão inicial encontrada");
         }
       } catch (error) {
-        console.error("Erro inesperado ao verificar sessão:", error);
+        console.error("AuthContext: Erro inesperado ao verificar sessão:", error);
       } finally {
-        setIsLoading(false);
+        if (!ignore) {
+          setIsLoading(false);
+        }
       }
     };
 
     checkSession();
     
     return () => {
+      console.log("AuthContext: Limpando efeito do AuthProvider");
+      ignore = true;
       subscription.unsubscribe();
     };
   }, []);
@@ -180,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      console.log("Tentando fazer login com email:", email);
+      console.log("AuthContext: Tentando fazer login com email:", email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -188,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       if (error) {
-        console.error("Erro no login:", error.message);
+        console.error("AuthContext: Erro no login:", error.message);
         toast({
           title: "Falha no login",
           description: error.message,
@@ -197,17 +184,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      console.log("Login bem-sucedido, dados da sessão:", data.session ? "presente" : "ausente");
+      console.log("AuthContext: Login bem-sucedido, dados da sessão:", data.session ? "presente" : "ausente");
       
       toast({
         title: "Login bem-sucedido",
         description: "Bem-vindo de volta ao sistema!",
       });
 
-      console.log("Login bem-sucedido através do método login()");
+      // O listener de autenticação irá atualizar o estado
       return true;
     } catch (error) {
-      console.error("Erro ao fazer login:", error);
+      console.error("AuthContext: Erro ao fazer login:", error);
       toast({
         title: "Erro no login",
         description: "Ocorreu um problema ao tentar fazer login",
@@ -219,10 +206,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // O resto do componente permanece o mesmo
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
-      console.log("Tentando registrar usuário:", email);
+      console.log("AuthContext: Tentando registrar usuário:", email);
       
       const { error } = await supabase.auth.signUp({
         email,
@@ -235,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       if (error) {
-        console.error("Erro no registro:", error.message);
+        console.error("AuthContext: Erro no registro:", error.message);
         toast({
           title: "Falha no cadastro",
           description: error.message,
@@ -248,10 +236,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Cadastro realizado",
         description: "Sua conta foi criada com sucesso!",
       });
-      console.log("Registro bem-sucedido para:", email);
+      console.log("AuthContext: Registro bem-sucedido para:", email);
       return true;
     } catch (error) {
-      console.error("Erro ao registrar:", error);
+      console.error("AuthContext: Erro ao registrar:", error);
       toast({
         title: "Erro no cadastro",
         description: "Ocorreu um problema ao tentar criar sua conta",
@@ -265,7 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = async (): Promise<void> => {
     try {
-      console.log("Iniciando login com Google");
+      console.log("AuthContext: Iniciando login com Google");
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -274,17 +262,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       if (error) {
-        console.error("Erro no login com Google:", error);
+        console.error("AuthContext: Erro no login com Google:", error);
         toast({
           title: "Falha no login com Google",
           description: error.message,
           variant: "destructive",
         });
       } else {
-        console.log("Redirecionando para autenticação Google");
+        console.log("AuthContext: Redirecionando para autenticação Google");
       }
     } catch (error) {
-      console.error("Erro no login com Google:", error);
+      console.error("AuthContext: Erro no login com Google:", error);
       toast({
         title: "Erro no login com Google",
         description: "Ocorreu um problema ao tentar login com Google",
@@ -295,11 +283,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
-      console.log("Iniciando processo de logout");
+      console.log("AuthContext: Iniciando processo de logout");
       const { error } = await supabase.auth.signOut();
       
       if (error) {
-        console.error("Erro ao fazer logout:", error);
+        console.error("AuthContext: Erro ao fazer logout:", error);
         toast({
           title: "Erro no logout",
           description: "Ocorreu um problema ao tentar sair",
@@ -316,9 +304,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "Você saiu com sucesso",
       });
       
-      console.log("Logout realizado com sucesso");
+      console.log("AuthContext: Logout realizado com sucesso");
     } catch (error) {
-      console.error("Erro inesperado ao fazer logout:", error);
+      console.error("AuthContext: Erro inesperado ao fazer logout:", error);
       toast({
         title: "Erro no logout",
         description: "Ocorreu um problema ao tentar sair",

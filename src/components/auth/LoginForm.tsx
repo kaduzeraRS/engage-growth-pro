@@ -1,35 +1,60 @@
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "./AuthContext";
 import { ArrowRight, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { login, loginWithGoogle } = useAuth();
+  const { user, login, loginWithGoogle, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { toast } = useToast();
+  
+  // Efeito para redirecionar se o usuário já estiver autenticado
+  useEffect(() => {
+    if (user && !authLoading) {
+      console.log("LoginForm: Usuário já autenticado, redirecionando para /dashboard");
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
     try {
-      console.log("Iniciando login com email:", email);
+      console.log("LoginForm: Iniciando login com email:", email);
       const success = await login(email, password);
       
       if (success) {
-        console.log("Login bem-sucedido, redirecionando para /dashboard");
-        navigate("/dashboard");
+        console.log("LoginForm: Login bem-sucedido, redirecionando para /dashboard");
+        toast({
+          title: "Login bem-sucedido",
+          description: "Bem-vindo ao painel.",
+        });
+        navigate("/dashboard", { replace: true });
       } else {
-        console.log("Login falhou, permanecendo na página");
+        console.log("LoginForm: Login falhou, permanecendo na página");
+        toast({
+          title: "Falha no login",
+          description: "Credenciais inválidas. Por favor, tente novamente.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error("Erro durante o processo de login:", error);
+      console.error("LoginForm: Erro durante o processo de login:", error);
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro durante o login. Por favor, tente novamente.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -37,13 +62,20 @@ export function LoginForm() {
 
   const handleGoogleLogin = async () => {
     try {
+      console.log("LoginForm: Iniciando login com Google");
       await loginWithGoogle();
       // O redirecionamento será gerenciado pelo Supabase OAuth
     } catch (error) {
-      console.error("Erro ao fazer login com Google:", error);
+      console.error("LoginForm: Erro ao fazer login com Google:", error);
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao tentar fazer login com o Google.",
+        variant: "destructive",
+      });
     }
   };
 
+  // O resto do componente permanece o mesmo
   return (
     <div className="mx-auto w-full max-w-md space-y-6">
       <div className="space-y-2 text-center">
