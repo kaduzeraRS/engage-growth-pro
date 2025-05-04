@@ -26,13 +26,20 @@ export function RegisterForm() {
     
     setIsLoading(true);
     
-    const success = await register(name, email, password);
-    
-    if (success) {
-      navigate("/dashboard");
+    try {
+      console.log("Iniciando registro com dados:", { name, email });
+      const success = await register(name, email, password);
+      
+      console.log("Resultado do registro:", success);
+      
+      if (success) {
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      console.error("Erro no processo de registro:", error);
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   return (

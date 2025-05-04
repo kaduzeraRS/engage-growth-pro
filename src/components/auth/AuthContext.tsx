@@ -1,6 +1,8 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { Session, User } from "@supabase/supabase-js";
 
 export interface User {
   id: string;
@@ -17,96 +19,176 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
-  loginWithGoogle: () => void;
-  logout: () => void;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Simular carregamento inicial e checar se há um usuário logado
-    const checkAuth = async () => {
-      const savedUser = localStorage.getItem("user");
-      if (savedUser) {
-        try {
-          // Numa implementação real, verificaríamos o token com o servidor
-          setUser(JSON.parse(savedUser));
-        } catch (error) {
-          localStorage.removeItem("user");
+    // Configurar listener para mudanças de autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        console.log("Auth event:", event);
+        setSession(currentSession);
+        
+        if (currentSession?.user) {
+          try {
+            // Buscar dados do perfil do usuário
+            const { data: profile, error: profileError } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", currentSession.user.id)
+              .single();
+
+            if (profileError) {
+              console.error("Erro ao buscar perfil:", profileError);
+              setUser(null);
+              return;
+            }
+
+            if (!profile) {
+              console.error("Perfil não encontrado para o usuário:", currentSession.user.id);
+              setUser(null);
+              return;
+            }
+
+            // Buscar dados da assinatura
+            const { data: subscription, error: subscriptionError } = await supabase
+              .from("subscriptions")
+              .select("*")
+              .eq("user_id", currentSession.user.id)
+              .single();
+
+            if (subscriptionError) {
+              console.error("Erro ao buscar assinatura:", subscriptionError);
+            }
+
+            // Construir objeto de usuário com dados do perfil e assinatura
+            setUser({
+              id: profile.id,
+              name: profile.name,
+              email: profile.email,
+              role: profile.role,
+              avatar: profile.avatar,
+              subscription: {
+                status: subscription?.status || "trial",
+                plan: subscription?.plan || "free",
+                expiresAt: subscription?.expires_at,
+              },
+            });
+          } catch (error) {
+            console.error("Erro ao processar usuário logado:", error);
+            setUser(null);
+          }
+        } else {
+          setUser(null);
         }
       }
+    );
+
+    // Verificar sessão inicial
+    const checkSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error("Erro ao verificar sessão:", error);
+        setIsLoading(false);
+        return;
+      }
+
+      setSession(data.session);
+      
+      if (data.session?.user) {
+        try {
+          // Buscar dados do perfil do usuário
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", data.session.user.id)
+            .single();
+
+          if (profileError || !profile) {
+            console.error("Erro ao buscar perfil inicial:", profileError);
+            setUser(null);
+            setIsLoading(false);
+            return;
+          }
+
+          // Buscar dados da assinatura
+          const { data: subscription, error: subscriptionError } = await supabase
+            .from("subscriptions")
+            .select("*")
+            .eq("user_id", data.session.user.id)
+            .single();
+
+          if (subscriptionError) {
+            console.error("Erro ao buscar assinatura inicial:", subscriptionError);
+          }
+
+          // Construir objeto de usuário com dados do perfil e assinatura
+          setUser({
+            id: profile.id,
+            name: profile.name,
+            email: profile.email,
+            role: profile.role,
+            avatar: profile.avatar,
+            subscription: {
+              status: subscription?.status || "trial",
+              plan: subscription?.plan || "free",
+              expiresAt: subscription?.expires_at,
+            },
+          });
+        } catch (error) {
+          console.error("Erro ao processar sessão inicial:", error);
+          setUser(null);
+        }
+      }
+      
       setIsLoading(false);
     };
+
+    checkSession();
     
-    checkAuth();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
       
-      // Para fins de demonstração - simulando uma API de login
-      // Em um caso real, você chamaria sua API de autenticação aqui
-      if (email === "contatokadueduardo@gmail.com" && password === "vaibrasil25") {
-        const mockUser: User = {
-          id: "1",
-          name: "Admin",
-          email: "contatokadueduardo@gmail.com",
-          role: "admin",
-          subscription: {
-            status: "active",
-            plan: "lifetime",
-            expiresAt: null
-          },
-          avatar: "https://github.com/shadcn.png"
-        };
-        
-        setUser(mockUser);
-        localStorage.setItem("user", JSON.stringify(mockUser));
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
         toast({
-          title: "Login bem-sucedido",
-          description: "Bem-vindo de volta ao sistema!",
+          title: "Falha no login",
+          description: error.message,
+          variant: "destructive",
         });
-        return true;
-      } 
-      // Usuário de demonstração normal
-      else if (email === "user@example.com" && password === "password") {
-        const mockUser: User = {
-          id: "2",
-          name: "Usuário Teste",
-          email: "user@example.com",
-          role: "user",
-          subscription: {
-            status: "active",
-            plan: "monthly",
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-          }
-        };
-        
-        setUser(mockUser);
-        localStorage.setItem("user", JSON.stringify(mockUser));
-        toast({
-          title: "Login bem-sucedido",
-          description: "Bem-vindo de volta ao sistema!",
-        });
-        return true;
+        return false;
       }
       
       toast({
-        title: "Falha no login",
-        description: "Email ou senha incorretos",
-        variant: "destructive",
+        title: "Login bem-sucedido",
+        description: "Bem-vindo de volta ao sistema!",
       });
-      return false;
+      return true;
     } catch (error) {
+      console.error("Erro ao fazer login:", error);
       toast({
         title: "Erro no login",
         description: "Ocorreu um problema ao tentar fazer login",
@@ -122,23 +204,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       
-      // Simulando registro (em um caso real, faria uma chamada à API)
-      setTimeout(() => {
-        const newUser: User = {
-          id: `user-${Date.now()}`,
-          name,
-          email,
-          role: "user",
-          subscription: {
-            status: "trial",
-            plan: "free",
-            expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-          }
-        };
-        
-        setUser(newUser);
-        localStorage.setItem("user", JSON.stringify(newUser));
-      }, 1000);
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+          },
+        },
+      });
+      
+      if (error) {
+        console.error("Erro no registro:", error.message);
+        toast({
+          title: "Falha no cadastro",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
       
       toast({
         title: "Cadastro realizado",
@@ -146,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return true;
     } catch (error) {
+      console.error("Erro ao registrar:", error);
       toast({
         title: "Erro no cadastro",
         description: "Ocorreu um problema ao tentar criar sua conta",
@@ -157,16 +242,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const loginWithGoogle = () => {
-    toast({
-      title: "Google Login",
-      description: "O login com Google será implementado na integração real",
-    });
+  const loginWithGoogle = async (): Promise<void> => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+        },
+      });
+      
+      if (error) {
+        toast({
+          title: "Falha no login com Google",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Erro no login com Google:", error);
+      toast({
+        title: "Erro no login com Google",
+        description: "Ocorreu um problema ao tentar login com Google",
+        variant: "destructive",
+      });
+    }
   };
 
-  const logout = () => {
+  const logout = async (): Promise<void> => {
+    const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      console.error("Erro ao fazer logout:", error);
+      toast({
+        title: "Erro no logout",
+        description: "Ocorreu um problema ao tentar sair",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setUser(null);
-    localStorage.removeItem("user");
+    setSession(null);
+    
     toast({
       title: "Logout realizado",
       description: "Você saiu com sucesso",
@@ -175,7 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, register, loginWithGoogle, logout }}
+      value={{ user, session, isLoading, login, register, loginWithGoogle, logout }}
     >
       {children}
     </AuthContext.Provider>
