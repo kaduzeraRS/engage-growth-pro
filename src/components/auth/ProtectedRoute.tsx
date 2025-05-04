@@ -28,6 +28,7 @@ const ProtectedRoute = ({
 
   // Se o usuário não estiver autenticado, redirecionar para o login
   if (!user) {
+    console.log("Usuário não autenticado, redirecionando para /login");
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -53,6 +54,7 @@ const ProtectedRoute = ({
   }
 
   // Se tudo estiver ok, renderizar os filhos
+  console.log("Usuário autenticado com papel correto, renderizando conteúdo protegido");
   return <>{children}</>;
 };
 

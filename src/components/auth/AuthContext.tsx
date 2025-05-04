@@ -102,67 +102,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Verificar sessão inicial
     const checkSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error("Erro ao verificar sessão:", error);
-        setIsLoading(false);
-        return;
-      }
-
-      setSession(data.session);
-      
-      if (data.session?.user) {
-        try {
-          console.log("Sessão encontrada para o usuário:", data.session.user.id);
-          // Buscar dados do perfil do usuário
-          const { data: profile, error: profileError } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", data.session.user.id)
-            .single();
-
-          if (profileError || !profile) {
-            console.error("Erro ao buscar perfil inicial:", profileError);
-            setUser(null);
-            setIsLoading(false);
-            return;
-          }
-
-          // Buscar dados da assinatura
-          const { data: subscription, error: subscriptionError } = await supabase
-            .from("subscriptions")
-            .select("*")
-            .eq("user_id", data.session.user.id)
-            .single();
-
-          if (subscriptionError) {
-            console.error("Erro ao buscar assinatura inicial:", subscriptionError);
-          }
-
-          // Construir objeto de usuário com dados do perfil e assinatura
-          setUser({
-            id: profile.id,
-            name: profile.name,
-            email: profile.email,
-            role: profile.role,
-            avatar: profile.avatar,
-            subscription: {
-              status: subscription?.status || "trial",
-              plan: subscription?.plan || "free",
-              expiresAt: subscription?.expires_at,
-            },
-          });
-
-          console.log("Sessão inicial: usuário autenticado", profile.name);
-        } catch (error) {
-          console.error("Erro ao processar sessão inicial:", error);
-          setUser(null);
+      try {
+        console.log("Verificando sessão inicial...");
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error("Erro ao verificar sessão:", error);
+          setIsLoading(false);
+          return;
         }
-      } else {
-        console.log("Nenhuma sessão inicial encontrada");
+
+        setSession(data.session);
+        
+        if (data.session?.user) {
+          try {
+            console.log("Sessão encontrada para o usuário:", data.session.user.id);
+            // Buscar dados do perfil do usuário
+            const { data: profile, error: profileError } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", data.session.user.id)
+              .single();
+
+            if (profileError || !profile) {
+              console.error("Erro ao buscar perfil inicial:", profileError);
+              setUser(null);
+              setIsLoading(false);
+              return;
+            }
+
+            // Buscar dados da assinatura
+            const { data: subscription, error: subscriptionError } = await supabase
+              .from("subscriptions")
+              .select("*")
+              .eq("user_id", data.session.user.id)
+              .single();
+
+            if (subscriptionError) {
+              console.error("Erro ao buscar assinatura inicial:", subscriptionError);
+            }
+
+            // Construir objeto de usuário com dados do perfil e assinatura
+            setUser({
+              id: profile.id,
+              name: profile.name,
+              email: profile.email,
+              role: profile.role,
+              avatar: profile.avatar,
+              subscription: {
+                status: subscription?.status || "trial",
+                plan: subscription?.plan || "free",
+                expiresAt: subscription?.expires_at,
+              },
+            });
+
+            console.log("Sessão inicial: usuário autenticado", profile.name);
+          } catch (error) {
+            console.error("Erro ao processar sessão inicial:", error);
+            setUser(null);
+          }
+        } else {
+          console.log("Nenhuma sessão inicial encontrada");
+        }
+      } catch (error) {
+        console.error("Erro inesperado ao verificar sessão:", error);
+      } finally {
+        setIsLoading(false);
       }
-      
-      setIsLoading(false);
     };
 
     checkSession();
@@ -177,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       console.log("Tentando fazer login com email:", email);
       
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -191,6 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         return false;
       }
+
+      console.log("Login bem-sucedido, dados da sessão:", data.session ? "presente" : "ausente");
       
       toast({
         title: "Login bem-sucedido",
@@ -215,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     try {
       setIsLoading(true);
+      console.log("Tentando registrar usuário:", email);
       
       const { error } = await supabase.auth.signUp({
         email,
@@ -240,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Cadastro realizado",
         description: "Sua conta foi criada com sucesso!",
       });
+      console.log("Registro bem-sucedido para:", email);
       return true;
     } catch (error) {
       console.error("Erro ao registrar:", error);
@@ -256,6 +265,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = async (): Promise<void> => {
     try {
+      console.log("Iniciando login com Google");
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -264,11 +274,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       if (error) {
+        console.error("Erro no login com Google:", error);
         toast({
           title: "Falha no login com Google",
           description: error.message,
           variant: "destructive",
         });
+      } else {
+        console.log("Redirecionando para autenticação Google");
       }
     } catch (error) {
       console.error("Erro no login com Google:", error);
@@ -281,25 +294,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async (): Promise<void> => {
-    const { error } = await supabase.auth.signOut();
-    
-    if (error) {
-      console.error("Erro ao fazer logout:", error);
+    try {
+      console.log("Iniciando processo de logout");
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error("Erro ao fazer logout:", error);
+        toast({
+          title: "Erro no logout",
+          description: "Ocorreu um problema ao tentar sair",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setUser(null);
+      setSession(null);
+      
+      toast({
+        title: "Logout realizado",
+        description: "Você saiu com sucesso",
+      });
+      
+      console.log("Logout realizado com sucesso");
+    } catch (error) {
+      console.error("Erro inesperado ao fazer logout:", error);
       toast({
         title: "Erro no logout",
         description: "Ocorreu um problema ao tentar sair",
         variant: "destructive",
       });
-      return;
     }
-    
-    setUser(null);
-    setSession(null);
-    
-    toast({
-      title: "Logout realizado",
-      description: "Você saiu com sucesso",
-    });
   };
 
   return (
