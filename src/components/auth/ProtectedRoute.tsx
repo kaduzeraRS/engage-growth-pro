@@ -1,4 +1,5 @@
 
+import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
@@ -13,6 +14,12 @@ const ProtectedRoute = ({
 }: ProtectedRouteProps) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
+
+  useEffect(() => {
+    if (!isLoading) {
+      console.log("ProtectedRoute: Auth loaded, user:", user ? "autenticado" : "não autenticado");
+    }
+  }, [isLoading, user]);
 
   // Aguardar carregamento da autenticação
   if (isLoading) {
